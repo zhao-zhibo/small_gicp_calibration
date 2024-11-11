@@ -4,8 +4,19 @@
 /// @brief Basic point cloud registration example with small_gicp::align()
 #include <queue>
 #include <iostream>
-#include <small_gicp/benchmark/read_points.hpp>
 
+#include <vector>
+#include <Eigen/Dense>
+#include <pcl/io/pcd_io.h>
+#include <pcl/point_types.h>
+#include <pcl/registration/icp.h>
+#include <pcl/visualization/pcl_visualizer.h>
+#include <pcl/console/time.h>
+#include <pcl/filters/voxel_grid.h>
+#include <pcl/filters/filter.h>
+#include <pcl/features/normal_3d.h>
+
+#include <small_gicp/benchmark/read_points.hpp>
 #include <small_gicp/ann/kdtree_omp.hpp>
 #include <small_gicp/points/point_cloud.hpp>
 #include <small_gicp/factors/gicp_factor.hpp>
@@ -15,6 +26,17 @@
 #include <small_gicp/registration/reduction_omp.hpp>
 #include <small_gicp/registration/registration.hpp>
 
+#include <pcl/visualization/pcl_visualizer.h>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/visualization/pcl_visualizer.h>
+#include <pcl/visualization/range_image_visualizer.h>
+#include <pcl/visualization/cloud_viewer.h>
+#include <pcl/visualization/histogram_visualizer.h>
+#include <pcl/visualization/point_cloud_color_handlers.h>
+#include <pcl/visualization/point_cloud_geometry_handlers.h>
+
+using PointT = pcl::PointXYZ;
 using namespace small_gicp;
 
 /// @brief Basic registration example using small_gicp::Registration.
@@ -254,13 +276,96 @@ struct MyGeneralFactor {
   double lambda;  ///< Regularization parameter (Increasing this makes the constraint stronger)
 };
 
+// 将 pcl::PointCloud<pcl::PointXYZ>::Ptr 转换为 std::vector<Eigen::Vector4f>
+std::vector<Eigen::Vector4f> convertToEigenPoints(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud) {
+    std::vector<Eigen::Vector4f> eigen_points;
+    for (const auto& point : cloud->points) {
+        eigen_points.emplace_back(point.x, point.y, point.z, 1.0f);
+    }
+    return eigen_points;
+}
+
+// 将 std::vector<Eigen::Vector4f> 转换回 pcl::PointCloud<pcl::PointXYZ>::Ptr
+pcl::PointCloud<pcl::PointXYZ>::Ptr convertToPCLPoints(const std::vector<Eigen::Vector4f>& eigen_points) {
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>());
+    for (const auto& point : eigen_points) {
+        cloud->points.emplace_back(point.x(), point.y(), point.z());
+    }
+    return cloud;
+}
+
+// 将 MyPointCloud 转换为 pcl::PointCloud<pcl::PointXYZ>::Ptr
+pcl::PointCloud<pcl::PointXYZ>::Ptr convertMyPointCloudToPCL(const MyPointCloud& myPointCloud) {
+    pcl::PointCloud<pcl::PointXYZ>::Ptr pclCloud(new pcl::PointCloud<pcl::PointXYZ>());
+    for (const auto& myPoint : myPointCloud) {
+        pcl::PointXYZ pclPoint;
+        pclPoint.x = myPoint.point[0];
+        pclPoint.y = myPoint.point[1];
+        pclPoint.z = myPoint.point[2];
+        pclCloud->points.push_back(pclPoint);
+    }
+    return pclCloud;
+}
+
+// 将点云中的所有点乘以变换矩阵
+pcl::PointCloud<pcl::PointXYZ>::Ptr transformPointCloud(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloudPoints, const Eigen::Matrix4d& transformMatrix) {
+    pcl::PointCloud<pcl::PointXYZ>::Ptr transformedPoints(new pcl::PointCloud<pcl::PointXYZ>());
+    for (const auto& point : cloudPoints->points) {
+        Eigen::Vector4f homogenousPoint(point.x, point.y, point.z, 1.0f);
+        Eigen::Vector4f transformedPoint = transformMatrix.cast<float>() * homogenousPoint;
+        pcl::PointXYZ pclPoint;
+        pclPoint.x = transformedPoint.x();
+        pclPoint.y = transformedPoint.y();
+        pclPoint.z = transformedPoint.z();
+        transformedPoints->points.push_back(pclPoint);
+    }
+    return transformedPoints;
+}
+
+void visualizeAlignment(const pcl::PointCloud<PointT>::Ptr& sourcePoints,
+                        const pcl::PointCloud<PointT>::Ptr& targetPoints,
+                        const pcl::PointCloud<PointT>::Ptr& alignedPoints) {
+    pcl::visualization::PCLVisualizer viewer("ICP Alignment");
+    int v1(0), v2(1);
+    viewer.createViewPort(0.0, 0.0, 0.5, 1.0, v1);
+    viewer.createViewPort(0.5, 0.0, 1.0, 1.0, v2);
+
+    float bckgrColor = 0.0;
+    float txtColor = 1.0 - bckgrColor;
+
+    // 目标点云（绿色）
+    pcl::visualization::PointCloudColorHandlerCustom<PointT> targetColor(targetPoints, 0, 255, 0);
+    viewer.addPointCloud(targetPoints, targetColor, "target_v1", v1);
+    viewer.addPointCloud(targetPoints, targetColor, "target_v2", v2);
+
+    // 原始点云（蓝色）
+    pcl::visualization::PointCloudColorHandlerCustom<PointT> sourceColor(sourcePoints, 0, 0, 255);
+    viewer.addPointCloud(sourcePoints, sourceColor, "source_v1", v1);
+
+    // ICP 对齐后的点云（红色）
+    pcl::visualization::PointCloudColorHandlerCustom<PointT> alignedColor(alignedPoints, 255, 0, 0);
+    viewer.addPointCloud(alignedPoints, alignedColor, "aligned_v2", v2);
+
+    // 添加文本描述
+    viewer.addText("Green: Target cloud\nBlue: Source cloud", 10, 15, 16, txtColor, txtColor, txtColor, "info_v1", v1);
+    viewer.addText("Green: Target cloud\nRed: Aligned cloud", 10, 15, 16, txtColor, txtColor, txtColor, "info_v2", v2);
+
+    viewer.setBackgroundColor(bckgrColor, bckgrColor, bckgrColor, v1);
+    viewer.setBackgroundColor(bckgrColor, bckgrColor, bckgrColor, v2);
+    viewer.setCameraPosition(-3.68332, 2.94092, 5.71266, 0.289847, 0.921947, -0.256907, 0);
+    viewer.setSize(960, 540);
+
+    viewer.spin();
+}
+
 /// @brief Example to perform preprocessing and registration separately.
-void example2(const std::vector<Eigen::Vector4f>& target_points, const std::vector<Eigen::Vector4f>& source_points) {
-  int num_threads = 4;                       // Number of threads to be used
-  double downsampling_resolution = 0.25;     // Downsampling resolution
+void CalibrateLiDAR(const std::vector<Eigen::Vector4f>& target_points, const std::vector<Eigen::Vector4f>& source_points) {
+  int num_threads = 8;                       // Number of threads to be used
+  double downsampling_resolution = 0.2;     // Downsampling resolution
   int num_neighbors = 10;                    // Number of neighbor points used for normal and covariance estimation
   double max_correspondence_distance = 1.0;  // Maximum correspondence distance between points (e.g., triming threshold)
 
+  std::cout << "Start CalibrateLiDAR "<< std::endl;
   // Convert to MyPointCloud
   std::shared_ptr<MyPointCloud> target = std::make_shared<MyPointCloud>();
   target->resize(target_points.size());
@@ -276,7 +381,7 @@ void example2(const std::vector<Eigen::Vector4f>& target_points, const std::vect
 
   // Downsampling works directly on MyPointCloud
   target = voxelgrid_sampling_omp(*target, downsampling_resolution, num_threads);
-  source = voxelgrid_sampling_omp(*source, downsampling_resolution, num_threads);
+  source = voxelgrid_sampling_omp(*source, downsampling_resolution / 2, num_threads);
 
   // Create nearest neighbor search
   auto target_search = std::make_shared<MyNearestNeighborSearch>(target);
@@ -300,7 +405,7 @@ void example2(const std::vector<Eigen::Vector4f>& target_points, const std::vect
   using Reduction = ParallelReductionOMP;                   // Use OMP-based parallel reduction
   using GeneralFactor = MyGeneralFactor;                    // Use custom general factor
   using CorrespondenceRejector = MyCorrespondenceRejector;  // Use custom correspondence rejector
-  using Optimizer = LevenbergMarquardtOptimizer;            // Use Levenberg-Marquardt optimizer
+  using Optimizer = GaussNewtonOptimizer;            // Use Levenberg-Marquardt optimizer
 
   Registration<PerPointFactor, Reduction, GeneralFactor, CorrespondenceRejector, Optimizer> registration;
   registration.reduction.num_threads = num_threads;
@@ -310,20 +415,20 @@ void example2(const std::vector<Eigen::Vector4f>& target_points, const std::vect
   // Align point clouds
   // Again, you can use your custom nearest neighbor search here!
   Eigen::Matrix3d R;
-  R << -0.0504737029707023, 0.997052838523742, -0.0577757951063726,
-      -0.99447604320556, -0.0555055571752936, -0.089087219133117,
-      -0.0920315424114858, 0.0529600822734298, 0.994346732728053;
+  R << -0.526850060744106, 0.849337386595231, -0.0324810287016031,
+      -0.843314838368697, -0.527118915835001, -0.104717390896216,
+      -0.106061759749258, -0.0277786302850944, 0.993971453724087;
   Eigen::Vector3d T;
-  T << 87.5697588584895, 111.823649169763, 3.92973660288014;
+  T << 113.990108814662, 95.9020040018133, 4.30071391796496;
   // 检查旋转矩阵是否正交
   if (!R.isUnitary()) {
       std::cerr << "Error: Rotation matrix R is not unitary." << std::endl;
   }
-
   // 检查旋转矩阵的行列式是否为1（即是否为有效的旋转矩阵）
   if (std::abs(R.determinant() - 1.0) > 1e-6) {
       std::cerr << "Error: Rotation matrix R determinant is not 1." << std::endl;
   }
+  std::cout << "Start align "<< std::endl;
   Eigen::Isometry3d init_T_target_source;
   init_T_target_source.linear() = R;
   init_T_target_source.translation() = T;
@@ -336,15 +441,20 @@ void example2(const std::vector<Eigen::Vector4f>& target_points, const std::vect
   std::cout << "num_inliers:" << result.num_inliers << std::endl;
   std::cout << "--- H ---" << std::endl << result.H << std::endl;
   std::cout << "--- b ---" << std::endl << result.b.transpose() << std::endl;
+
+  // 显示对齐前和对齐后的点云
+  pcl::PointCloud<pcl::PointXYZ>::Ptr sourcePoints = convertMyPointCloudToPCL(*source);
+  pcl::PointCloud<pcl::PointXYZ>::Ptr targetPoints = convertMyPointCloudToPCL(*target);
+  pcl::PointCloud<pcl::PointXYZ>::Ptr alignedPoints = transformPointCloud(sourcePoints,result.T_target_source.matrix());
+  visualizeAlignment(sourcePoints, targetPoints, alignedPoints);
 }
 
 int main(int argc, char** argv) {
-
   // 1. 读取 PCD 文件中的点云（LiDAR点云）
   pcl::PointCloud<pcl::PointXYZ>::Ptr LiDARPoints(new pcl::PointCloud<pcl::PointXYZ>());
-  pcl::io::loadPCDFile("/media/zhao/ZhaoZhibo1/AllData/2024-1030_suidao/yuan_30m/1730278108.807866335.pcd", *LiDARPoints); // 替换为实际路径
+  pcl::io::loadPCDFile("/media/zhao/ZhaoZhibo1/AllData/2024-1030_suidao/zhang_0m/1730278105.310431004.pcd", *LiDARPoints); // 替换为实际路径
   std::cout << "Loaded LiDAR PCD point cloud with " << LiDARPoints->width * LiDARPoints->height << " data points." << std::endl;
-
+  
   // 2. 读取 LAS 文件中的点云（地图点云）
   pcl::PointCloud<pcl::PointXYZ>::Ptr MapPoints(new pcl::PointCloud<pcl::PointXYZ>());
   pcl::io::loadPCDFile("/home/zhao/Data/map.pcd", *MapPoints); // 替换为实际路径
@@ -354,15 +464,18 @@ int main(int argc, char** argv) {
       point.y -= 3364300;
   }
   std::cout << "Loaded LAS map point cloud with " << MapPoints->width * MapPoints->height << " data points." << std::endl;
-  std::vector<Eigen::Vector4f> target_points = read_ply("data/target.ply");
-  std::vector<Eigen::Vector4f> source_points = read_ply("data/source.ply");
-  if (target_points.empty() || source_points.empty()) {
-  std::cerr << "error: failed to read points from data/(target|source).ply" << std::endl;
-    return 0;
-  }
 
+  // 将 LiDARPoints 转换为 source_points
+  std::vector<Eigen::Vector4f> source_points = convertToEigenPoints(LiDARPoints);
+  // 将 MapPoints 转换为 target_points
+  std::vector<Eigen::Vector4f> target_points = convertToEigenPoints(MapPoints);
+
+  if (target_points.empty() || source_points.empty()) {
+      std::cerr << "error: failed to read points from data/(target|source).ply" << std::endl;
+      return 0;
+  }
   // example1(target_points, source_points);
-  example2(target_points, source_points);
+  CalibrateLiDAR(target_points, source_points);
 
   return 0;
 }
