@@ -454,12 +454,12 @@ int main(int argc, char** argv) {
 
   // 1. 读取 PCD 文件中的点云（LiDAR点云）
   pcl::PointCloud<pcl::PointXYZ>::Ptr LiDARPoints(new pcl::PointCloud<pcl::PointXYZ>());
-  pcl::io::loadPCDFile("/media/zhao/ZhaoZhibo1/AllData/2024-1030_suidao/yuan_30m/1730278108.807866335.pcd", *LiDARPoints); // 替换为实际路径
+  pcl::io::loadPCDFile("/media/zhao/ZhaoZhibo1/AllData/2024_1030_suidao/yuan_30m/1730278108.807866335.pcd", *LiDARPoints); // 替换为实际路径
   std::cout << "Loaded LiDAR PCD point cloud with " << LiDARPoints->width * LiDARPoints->height << " data points." << std::endl;
   
   // 2. 读取 LAS 文件中的点云（地图点云）
   pcl::PointCloud<pcl::PointXYZ>::Ptr MapPoints(new pcl::PointCloud<pcl::PointXYZ>());
-  pcl::io::loadPCDFile("/home/zhao/Data/map.pcd", *MapPoints); // 替换为实际路径
+  pcl::io::loadPCDFile("/media/zhao/ZhaoZhibo1/AllData/2024_1030_suidao/VehicleDataAndResult/Map/pcd/MergedMap2_better.pcd", *MapPoints); // 替换为实际路径
   // 对 MapPoints 点云中的每个点进行处理
   for (auto& point : MapPoints->points) {
       point.x -= 513500;
