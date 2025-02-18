@@ -182,6 +182,7 @@ struct Traits<MyNearestNeighborSearch> {
 struct MyCorrespondenceRejector {
   MyCorrespondenceRejector() : max_correpondence_dist_sq(1.0), min_feature_cos_dist(0.9) {}
 
+  //  结构体通过定义距离和特征的拒绝条件，筛选出不可靠的点对匹配，从而提高点云配准的精度和鲁棒性
   /// @brief Check if the correspondence should be rejected.
   /// @param T              Current estimate of T_target_source
   /// @param target_index   Target point index
@@ -236,6 +237,7 @@ struct MyGeneralFactor {
     dof_mask << 1.0, 1.0, 0.0, 0.0, 0.0, 0.0;
 
     // Fix roll and pitch rotation by adding a large penalty (soft contraint)
+    // 对H矩阵施加约束，也就是对rx和ry方向增加了一个很大的惩罚，这个H阵很可能就是海塞矩阵
     (*H) += dof_mask.asDiagonal() * lambda;
   }
 
@@ -296,9 +298,9 @@ void example2(const std::vector<Eigen::Vector4f>& target_points, const std::vect
   }
 
   // Point-to-plane ICP + OMP-based parallel reduction
-  using PerPointFactor = PointToPlaneICPFactor;             // Use point-to-plane ICP factor. Target must have normals.
-  using Reduction = ParallelReductionOMP;                   // Use OMP-based parallel reduction
-  using GeneralFactor = MyGeneralFactor;                    // Use custom general factor
+  using PerPointFactor = PointToPlaneICPFactor;             // Use point-to-plane ICP factor. Target must have normals.这个factor是用来计算点到平面的距离误差因子，同时调用因子中的linearize函数
+  using Reduction = ParallelReductionOMP;                   // Use OMP-based parallel reduction  omp用来加速使用的，同时这里面有linearize函数，用来计算误差和海塞矩阵
+  using GeneralFactor = MyGeneralFactor;                    // Use custom general factor 这个factor目的是为了给海塞矩阵增加约束
   using CorrespondenceRejector = MyCorrespondenceRejector;  // Use custom correspondence rejector
   using Optimizer = LevenbergMarquardtOptimizer;            // Use Levenberg-Marquardt optimizer
 
