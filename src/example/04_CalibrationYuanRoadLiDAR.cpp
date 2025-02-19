@@ -360,8 +360,8 @@ void visualizeAlignment(const pcl::PointCloud<PointT>::Ptr& sourcePoints,
 
 /// @brief Example to perform preprocessing and registration separately.
 void CalibrateLiDAR(const std::vector<Eigen::Vector4f>& target_points, const std::vector<Eigen::Vector4f>& source_points) {
-  int num_threads = 8;                       // Number of threads to be used
-  double downsampling_resolution = 0.25;     // Downsampling resolution
+  int num_threads = 32;                       // Number of threads to be used
+  double downsampling_resolution = 0.5;     // Downsampling resolution
   int num_neighbors = 10;                    // Number of neighbor points used for normal and covariance estimation
   double max_correspondence_distance = 1.0;  // Maximum correspondence distance between points (e.g., triming threshold)
 
@@ -380,7 +380,7 @@ void CalibrateLiDAR(const std::vector<Eigen::Vector4f>& target_points, const std
   }
 
   // Downsampling works directly on MyPointCloud
-  target = voxelgrid_sampling_omp(*target, downsampling_resolution, num_threads);
+  target = voxelgrid_sampling_omp(*target, downsampling_resolution * 2, num_threads);
   source = voxelgrid_sampling_omp(*source, downsampling_resolution / 2, num_threads);
 
   // Create nearest neighbor search
@@ -389,8 +389,9 @@ void CalibrateLiDAR(const std::vector<Eigen::Vector4f>& target_points, const std
 
   // Estimate point normals
   // You can use your custom nearest neighbor search here!
-  std::cout << "Start Estimate point normals"<< std::endl;
+  std::cout << "Start Estimate Target point normals"<< std::endl;
   estimate_normals_omp(*target, *target_search, num_neighbors, num_threads);
+  std::cout << "Start Estimate Source point normals"<< std::endl;
   estimate_normals_omp(*source, *source_search, num_neighbors, num_threads);
 
   // Compute point features (e.g., FPFH, SHOT, etc.)
@@ -454,12 +455,12 @@ int main(int argc, char** argv) {
 
   // 1. 读取 PCD 文件中的点云（LiDAR点云）
   pcl::PointCloud<pcl::PointXYZ>::Ptr LiDARPoints(new pcl::PointCloud<pcl::PointXYZ>());
-  pcl::io::loadPCDFile("/media/zhao/ZhaoZhibo1/AllData/2024_1030_suidao/yuan_30m/1730278108.807866335.pcd", *LiDARPoints); // 替换为实际路径
+  pcl::io::loadPCDFile("/media/zhao/ZhaoZhibo2T/AllData/2024_1030_suidao/yuan_30m/1730278108.807866335.pcd", *LiDARPoints); // 点云的pcd路径
   std::cout << "Loaded LiDAR PCD point cloud with " << LiDARPoints->width * LiDARPoints->height << " data points." << std::endl;
   
   // 2. 读取 LAS 文件中的点云（地图点云）
   pcl::PointCloud<pcl::PointXYZ>::Ptr MapPoints(new pcl::PointCloud<pcl::PointXYZ>());
-  pcl::io::loadPCDFile("/media/zhao/ZhaoZhibo1/AllData/2024_1030_suidao/VehicleDataAndResult/Map/pcd/MergedMap2_better.pcd", *MapPoints); // 替换为实际路径
+  pcl::io::loadPCDFile("/media/zhao/ZhaoZhibo2T/AllData/2024_1030_suidao/VehicleDataAndResult/Map/pcd/MergedMap2_better.pcd", *MapPoints); // 高精地图的pcd路径
   // 对 MapPoints 点云中的每个点进行处理
   for (auto& point : MapPoints->points) {
       point.x -= 513500;
