@@ -330,7 +330,7 @@ void visualizeAlignment(const pcl::PointCloud<PointT>::Ptr& sourcePoints,
     viewer.createViewPort(0.0, 0.0, 0.5, 1.0, v1);
     viewer.createViewPort(0.5, 0.0, 1.0, 1.0, v2);
 
-    float bckgrColor = 0.0;
+    float bckgrColor = 1.0; // 调整背景色的颜色
     float txtColor = 1.0 - bckgrColor;
 
     // 目标点云（绿色）
@@ -346,9 +346,15 @@ void visualizeAlignment(const pcl::PointCloud<PointT>::Ptr& sourcePoints,
     pcl::visualization::PointCloudColorHandlerCustom<PointT> alignedColor(alignedPoints, 255, 0, 0);
     viewer.addPointCloud(alignedPoints, alignedColor, "aligned_v2", v2);
 
+    // 添加点云之后设定点的大小
+    viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1.5, "target_v1", v1);
+    viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1.5, "target_v2", v2);
+    viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1.5, "source_v1", v1);
+    viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1.5, "aligned_v2", v2);
+
     // 添加文本描述
-    viewer.addText("Green: Target cloud\nBlue: Source cloud", 10, 15, 16, txtColor, txtColor, txtColor, "info_v1", v1);
-    viewer.addText("Green: Target cloud\nRed: Aligned cloud", 10, 15, 16, txtColor, txtColor, txtColor, "info_v2", v2);
+    viewer.addText("Green: RoaddSide point cloud\nBlue: Vehicle point cloud", 10, 15, 16, txtColor, txtColor, txtColor, "info_v1", v1);
+    viewer.addText("Green: RoadSide point cloud\nRed: Aligned Vehicle cloud", 10, 15, 16, txtColor, txtColor, txtColor, "info_v2", v2);
 
     viewer.setBackgroundColor(bckgrColor, bckgrColor, bckgrColor, v1);
     viewer.setBackgroundColor(bckgrColor, bckgrColor, bckgrColor, v2);
@@ -385,7 +391,7 @@ void CalibrateLiDAR(const std::vector<Eigen::Vector4f>& target_points, const std
 
   // Create nearest neighbor search
   auto target_search = std::make_shared<MyNearestNeighborSearch>(target);
-  auto source_search = std::make_shared<MyNearestNeighborSearch>(target);
+  auto source_search = std::make_shared<MyNearestNeighborSearch>(source);
 
   // Estimate point normals
   // You can use your custom nearest neighbor search here!
