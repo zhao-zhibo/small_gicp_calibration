@@ -57,8 +57,8 @@ void example2(const std::vector<Eigen::Vector4f>& target_points, const std::vect
 }
 
 int main(int argc, char** argv) {
-  std::vector<Eigen::Vector4f> target_points = read_ply("data/target.ply");
-  std::vector<Eigen::Vector4f> source_points = read_ply("data/source.ply");
+  std::vector<Eigen::Vector4f> target_points = read_ply("/home/zhao/Codes/ICP/small_gicp_calibration/data/target.ply");
+  std::vector<Eigen::Vector4f> source_points = read_ply("/home/zhao/Codes/ICP/small_gicp_calibration/data/source.ply");
   if (target_points.empty() || source_points.empty()) {
     std::cerr << "error: failed to read points from data/(target|source).ply" << std::endl;
     return 1;

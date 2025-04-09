@@ -42,9 +42,9 @@ using namespace small_gicp;
 /// @brief Basic registration example using small_gicp::Registration.
 void example1(const std::vector<Eigen::Vector4f>& target_points, const std::vector<Eigen::Vector4f>& source_points) {
   int num_threads = 4;                       // Number of threads to be used
-  double downsampling_resolution = 0.1;     // Downsampling resolution
-  int num_neighbors = 20;                    // Number of neighbor points used for normal and covariance estimation
-  double max_correspondence_distance = 3.0;  // Maximum correspondence distance between points (e.g., triming threshold)
+  double downsampling_resolution = 0.25;     // Downsampling resolution
+  int num_neighbors = 10;                    // Number of neighbor points used for normal and covariance estimation
+  double max_correspondence_distance = 1.0;  // Maximum correspondence distance between points (e.g., triming threshold)
 
   // Convert to small_gicp::PointCloud
   auto target = std::make_shared<PointCloud>(target_points);
@@ -330,7 +330,7 @@ void visualizeAlignment(const pcl::PointCloud<PointT>::Ptr& sourcePoints,
     viewer.createViewPort(0.0, 0.0, 0.5, 1.0, v1);
     viewer.createViewPort(0.5, 0.0, 1.0, 1.0, v2);
 
-    float bckgrColor = 1.0; // 调整背景色的颜色
+    float bckgrColor = 0.0;
     float txtColor = 1.0 - bckgrColor;
 
     // 目标点云（绿色）
@@ -346,15 +346,9 @@ void visualizeAlignment(const pcl::PointCloud<PointT>::Ptr& sourcePoints,
     pcl::visualization::PointCloudColorHandlerCustom<PointT> alignedColor(alignedPoints, 255, 0, 0);
     viewer.addPointCloud(alignedPoints, alignedColor, "aligned_v2", v2);
 
-    // 添加点云之后设定点的大小
-    viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1.5, "target_v1", v1);
-    viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1.5, "target_v2", v2);
-    viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1.5, "source_v1", v1);
-    viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1.5, "aligned_v2", v2);
-
     // 添加文本描述
-    viewer.addText("Green: RoaddSide point cloud\nBlue: Vehicle point cloud", 10, 15, 16, txtColor, txtColor, txtColor, "info_v1", v1);
-    viewer.addText("Green: RoadSide point cloud\nRed: Aligned Vehicle cloud", 10, 15, 16, txtColor, txtColor, txtColor, "info_v2", v2);
+    viewer.addText("Green: Target cloud\nBlue: Source cloud", 10, 15, 16, txtColor, txtColor, txtColor, "info_v1", v1);
+    viewer.addText("Green: Target cloud\nRed: Aligned cloud", 10, 15, 16, txtColor, txtColor, txtColor, "info_v2", v2);
 
     viewer.setBackgroundColor(bckgrColor, bckgrColor, bckgrColor, v1);
     viewer.setBackgroundColor(bckgrColor, bckgrColor, bckgrColor, v2);
@@ -366,8 +360,8 @@ void visualizeAlignment(const pcl::PointCloud<PointT>::Ptr& sourcePoints,
 
 /// @brief Example to perform preprocessing and registration separately.
 void CalibrateLiDAR(const std::vector<Eigen::Vector4f>& target_points, const std::vector<Eigen::Vector4f>& source_points) {
-  int num_threads = 8;                       // Number of threads to be used
-  double downsampling_resolution = 0.2;     // Downsampling resolution
+  int num_threads = 32;                       // Number of threads to be used
+  double downsampling_resolution = 0.5;     // Downsampling resolution
   int num_neighbors = 10;                    // Number of neighbor points used for normal and covariance estimation
   double max_correspondence_distance = 1.0;  // Maximum correspondence distance between points (e.g., triming threshold)
 
@@ -391,7 +385,7 @@ void CalibrateLiDAR(const std::vector<Eigen::Vector4f>& target_points, const std
 
   // Create nearest neighbor search
   auto target_search = std::make_shared<MyNearestNeighborSearch>(target);
-  auto source_search = std::make_shared<MyNearestNeighborSearch>(source);
+  auto source_search = std::make_shared<MyNearestNeighborSearch>(target);
 
   // Estimate point normals
   // You can use your custom nearest neighbor search here!
@@ -420,57 +414,17 @@ void CalibrateLiDAR(const std::vector<Eigen::Vector4f>& target_points, const std
   registration.rejector.max_correpondence_dist_sq = max_correspondence_distance * max_correspondence_distance;
   registration.general_factor.lambda = 1e8;
 
-  // source_points为车载点云，target_points为路侧点云
-  Eigen::Matrix4d T_n_RoadLidar;
-  T_n_RoadLidar << -0.989779,  0.101124, -0.100557, 50.148455,
-    -0.086973, -0.986838, -0.136332, 34.124473,
-    -0.11302,  -0.126193,  0.985546,  4.181041,
-    0.0   ,     0.0   ,     0.0 ,       1.0    ;
-
-  Eigen::Matrix4d T_n_VehicleImu;
-  T_n_VehicleImu << 0.5393430085808524, -0.8420801500120758, -0.0031843446099313116, 52.47453624170126,
-            0.8420855812848653, 0.5393343001278736, 0.0032228089778137663, 25.134342352896468,
-            -0.0009964371959344106, -0.0044196901720407935, 0.9999897366731811, 4.062797683945216,
-            0.0, 0.0, 0.0, 1.0;
-
-  Eigen::Matrix4d T_Imu_Vehiclelidar;
-  T_Imu_Vehiclelidar << 0.99888562,  0.02594205, -0.0394274,   0.03,
-                         -0.02613833,  0.99964834, -0.00447079,  0.48,
-                         0.03929756,  0.00549637,  0.99921244,  0.33,
-                         0.0,          0.0,          0.0,         1.0;
-
-  Eigen::Matrix4d T_n_Vehiclelidar = T_n_VehicleImu * T_Imu_Vehiclelidar;
-
-  Eigen::Matrix4d T_roadLidar_Vehiclelidar = T_n_RoadLidar.inverse() * T_n_Vehiclelidar;
-
-
-  // T_roadLidar_Vehiclelidar << -0.631181,  0.770437, -0.0896486, -1.18381,
-  //                          -0.764444, -0.637468, -0.0962252,  8.75978,
-  //                          -0.131284,  0.0077958,  0.991315,   1.19855,
-  //                                   0,         0,         0,         1;
-
-  // Eigen的构造可以是w x  y z的顺序
-  T_roadLidar_Vehiclelidar.block<3,3>(0,0) =
-    Eigen::Quaterniond(-0.410290, -0.081234, -0.027987, 0.907898).toRotationMatrix();
-  T_roadLidar_Vehiclelidar.block<3,1>(0,3) << 25.620451, -10.966012, 4.353220;
-  // T_roadLidar_Vehiclelidar << -0.646623,  0.752775, -0.123324,  24.0338,
-  // -0.743623, -0.658099, -0.118033,  -9.20663,
-  // -0.170012,  0.0153838,  0.985322,   4.52801,
-  //          0,         0,         0,         1;
-
-  // // 从liosam中获取的初值，这个初值不准确
-  // T_roadLidar_Vehiclelidar << -0.613682,  0.780902, -0.116555, -16.4977,
-  //                           -0.771603, -0.624459, -0.121159,  46.7048,
-  //                           -0.167397,  0.0155812,  0.985767,   6.00928,
-  //                                   0,         0,         0,        1;
-
-  std::cout << "T_roadLidar_Vehiclelidar:" << std::endl << T_roadLidar_Vehiclelidar << std::endl;
-
   // Align point clouds
   // Again, you can use your custom nearest neighbor search here!
-  Eigen::Matrix3d R = T_roadLidar_Vehiclelidar.block<3, 3>(0, 0);
-  Eigen::Vector3d T = T_roadLidar_Vehiclelidar.block<3, 1>(0, 3);
 
+
+  Eigen::Matrix4d T_n_RoadLidar;
+  T_n_RoadLidar << -0.989779,  0.101124, -0.100557, 50.148455,
+                  -0.086973, -0.986838, -0.136332, 34.124473,
+                  -0.11302,  -0.126193,  0.985546,  4.181041,
+                    0.0,       0.0,       0.0,       1.0;
+  Eigen::Matrix3d R = T_n_RoadLidar.block<3,3>(0,0);
+  Eigen::Vector3d T = T_n_RoadLidar.block<3,1>(0,3);
   // 检查旋转矩阵是否正交
   if (!R.isUnitary()) {
       std::cerr << "Error: Rotation matrix R is not unitary." << std::endl;
@@ -502,21 +456,25 @@ void CalibrateLiDAR(const std::vector<Eigen::Vector4f>& target_points, const std
 
 int main(int argc, char** argv) {
 
-  // 1. source 车载点云
-  pcl::PointCloud<pcl::PointXYZ>::Ptr vehicleLiDARPoints(new pcl::PointCloud<pcl::PointXYZ>());
-  pcl::io::loadPCDFile("/media/zhao/ZhaoZhibo1T/AllData/tunnelRoadside/data_2025220163953/Temp/377668.8462_VehicleleCloud.pcd", *vehicleLiDARPoints); // 点云的pcd路径
+  // 1. 读取 PCD 文件中的点云（LiDAR点云）
+  pcl::PointCloud<pcl::PointXYZ>::Ptr LiDARPoints(new pcl::PointCloud<pcl::PointXYZ>());
+  pcl::io::loadPCDFile("/home/zhao/Data/tunnelData/data_2025220163953/90mCalibration/1740039413.089539528.pcd", *LiDARPoints); // 点云的pcd路径
+  std::cout << "Loaded LiDAR PCD point cloud with " << LiDARPoints->width * LiDARPoints->height << " data points." << std::endl;
   
-  // 2. target 路侧点云
-  pcl::PointCloud<pcl::PointXYZ>::Ptr roadLiDARPoints(new pcl::PointCloud<pcl::PointXYZ>());
-  pcl::io::loadPCDFile("/media/zhao/ZhaoZhibo1T/AllData/tunnelRoadside/data_2025220163953/Temp/377668.8736_roadSide.pcd", *roadLiDARPoints); // 高精地图的pcd路径
+  // 2. 读取 LAS 文件中的点云（地图点云）
+  pcl::PointCloud<pcl::PointXYZ>::Ptr MapPoints(new pcl::PointCloud<pcl::PointXYZ>());
+  pcl::io::loadPCDFile("/media/zhao/ZhaoZhibo1T/AllData/tunnelRoadside/HDMap/HDMap_LiDAR_90m_And_180m/90mLidar1.pcd", *MapPoints); // 高精地图的pcd路径
+  // 对 MapPoints 点云中的每个点进行处理
+  for (auto& point : MapPoints->points) {
+      point.x -= 513500;
+      point.y -= 3364400;
+  }
+  std::cout << "Loaded LAS map point cloud with " << MapPoints->width * MapPoints->height << " data points." << std::endl;
 
-  std::cout << "Loaded vehicleLiDARPoints with " << vehicleLiDARPoints->width * vehicleLiDARPoints->height << " data points." << std::endl;
-  std::cout << "Loaded roadLiDARPoints with " << roadLiDARPoints->width * roadLiDARPoints->height << " data points." << std::endl;
-
-  // 将 vehicleLiDARPoints 转换为 source_points
-  std::vector<Eigen::Vector4f> source_points = convertToEigenPoints(vehicleLiDARPoints);
-  // 将 roadLiDARPoints 转换为 target_points
-  std::vector<Eigen::Vector4f> target_points = convertToEigenPoints(roadLiDARPoints);
+  // 将 LiDARPoints 转换为 source_points
+  std::vector<Eigen::Vector4f> source_points = convertToEigenPoints(LiDARPoints);
+  // 将 MapPoints 转换为 target_points
+  std::vector<Eigen::Vector4f> target_points = convertToEigenPoints(MapPoints);
 
   if (target_points.empty() || source_points.empty()) {
       std::cerr << "error: failed to read points from data/(target|source).ply" << std::endl;
