@@ -408,6 +408,7 @@ open3d.visualization.draw_geometries([target_o3d, source_o3d])
 
 ### C++
 
+运行示例如下：
 ```bash
 cd small_gicp
 mkdir build && cd build
